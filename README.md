@@ -1,0 +1,1 @@
+Simple rust implementation of Conway's Game of Life, not at all optimized
