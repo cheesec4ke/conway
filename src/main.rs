@@ -1,4 +1,5 @@
 use ahash::AHashMap;
+use clap::Parser;
 use crossterm::style::Print;
 use crossterm::terminal::{Clear, ClearType};
 use crossterm::{cursor, execute, queue, terminal};
@@ -20,13 +21,44 @@ macro_rules! printnl {
     }};
 }
 
+#[derive(Parser)]
+#[command(version)]
+struct Args {
+    #[arg(short, long)]
+    fps: Option<u64>,
+    #[arg(short = 'x', long)]
+    width: Option<usize>,
+    #[arg(short = 'y', long)]
+    height: Option<usize>,
+    #[arg(
+        short,
+        long,
+        require_equals = true,
+        default_value = "false",
+        default_missing_value = "true",
+        num_args = 0..1,
+    )]
+    quiet: bool,
+}
+
 fn main() {
-    //set board size according to terminal size with some extra space at the bottom
-    const BLANK_LINES: u16 = 7;
-    let width = terminal::size().unwrap().0 as usize;
-    let height = (
-        (terminal::size().unwrap().1 * 2) - (BLANK_LINES * 2)
+    let args = Args::parse();
+
+    //set board size according to terminal size with some extra space at the bottom unless set otherwise
+    let mut blank_lines: u16 = 7;
+    if args.quiet {
+        blank_lines = 3;
+    }
+    let mut width = terminal::size().unwrap().0 as usize;
+    if let Some(w) = args.width {
+        width = w;
+    }
+    let mut height = (
+        (terminal::size().unwrap().1 * 2) - (blank_lines * 2)
     ) as usize;
+    if let Some(h) = args.height {
+        height = h;
+    }
 
     //initialize variables
     let mut board = random_board(width, height);
@@ -34,7 +66,13 @@ fn main() {
     let mut board_history = AHashMap::new();
     let mut stdout = io::stdout();
 
-    let frame_time = get_fps(20); //get fps
+    let frame_time: Duration;
+    match args.fps {
+        None => frame_time = get_fps(20),
+        Some(0) => frame_time = Duration::ZERO,
+        Some(fps) => frame_time = Duration::from_millis(1000 / fps)
+    }
+
     queue!(stdout, Clear(ClearType::All), cursor::Hide).unwrap(); //prep console
 
     //main loop
@@ -43,10 +81,14 @@ fn main() {
     loop {
         queue!(stdout, cursor::MoveTo(0, 0)).unwrap();
         print_board(&board, &mut stdout);
-        print_stats(&board, generation, &mut stdout);
+        if !args.quiet {
+            print_stats(&board, generation, &mut stdout);
+        }
         match detect_loop(&board, generation, &mut board_history) {
             Some(loop_start) => {
-                printnl!(stdout, "Game started looping from generation {loop_start}");
+                if !args.quiet {
+                    printnl!(stdout, "Game started looping from generation {loop_start}");
+                }
                 break;
             }
             None => {
@@ -61,7 +103,7 @@ fn main() {
     }
 
     //print average fps if unlimited
-    if frame_time.is_zero() {
+    if frame_time.is_zero() && !args.quiet {
         execute!(
             stdout,
             Print(format!(
@@ -73,11 +115,10 @@ fn main() {
     }
 
     //cleanup
-    execute!(
-        stdout,
-        cursor::MoveToNextLine(1),
-        cursor::Show
-    ).unwrap();
+    if !args.quiet {
+        execute!(stdout, cursor::MoveToNextLine(1)).unwrap();
+    }
+    execute!(stdout, cursor::Show).unwrap();
 }
 
 ///Generates a random board with a given width and height
