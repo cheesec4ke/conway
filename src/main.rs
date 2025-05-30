@@ -3,8 +3,8 @@ use crossterm::terminal::{Clear, ClearType};
 use crossterm::{cursor, execute, queue, terminal};
 use std::collections::HashMap;
 use std::io::{Stdout, Write};
-use std::{io, thread};
 use std::time::{Duration, Instant};
+use std::{io, thread};
 
 ///Formats and prints each argument with a new line to a given writer
 macro_rules! printnl {
@@ -27,18 +27,19 @@ fn main() {
     let height = (
         (terminal::size().unwrap().1 * 2) - (BLANK_LINES * 2)
     ) as usize;
-    
+
     //initialize variables
     let mut board = random_board(width, height);
     let mut generation = 0usize;
     let mut board_history = HashMap::new();
     let mut stdout = io::stdout();
-    
+
     let frame_time = get_fps(20); //get fps
     queue!(stdout, Clear(ClearType::All), cursor::Hide).unwrap(); //prep console
-    let start_time = Instant::now(); //start counting for average fps calculation
-    
+
     //main loop
+    let start_time = Instant::now(); //start counting for average fps calculation
+    let mut deadline = Instant::now() + frame_time; //set the fps limit
     loop {
         queue!(stdout, cursor::MoveTo(0, 0)).unwrap();
         print_board(&board, &mut stdout);
@@ -53,11 +54,14 @@ fn main() {
                 generation += 1;
             }
         }
-        thread::sleep(frame_time);
+        if !frame_time.is_zero() {
+            sleep_until(deadline);
+            deadline += frame_time;
+        };
     }
 
     //print average fps if unlimited
-    if frame_time.as_millis() == 0 {
+    if frame_time.is_zero() {
         execute!(
             stdout,
             Print(format!(
@@ -89,7 +93,7 @@ fn random_board(width: usize, height: usize) -> Vec<Vec<bool>> {
     board
 }
 
-///Asks the user for their desired fps, uses default_fps if their input is invalid
+///Asks the user for their desired FPS, uses default_fps if their input is invalid
 fn get_fps(default_fps: u64) -> Duration {
     print!("Input the desired FPS (0 for unlimited, default {default_fps}): ");
     io::stdout().flush().unwrap();
@@ -153,26 +157,23 @@ fn print_board(board: &Vec<Vec<bool>>, stdout: &mut Stdout) {
         //only add to buffer every 2 rows
         if y % 2 == 0 {
             for x in 0..board[0].len() {
-                let pixels: &str;
+                let pixels: char;
                 //check if bottom pixel would be out of bounds
                 if y + 1 != board.len() {
-                    let character = (
-                        board[y][x],
-                        board[y + 1][x],
-                    );
+                    let character = (board[y][x], board[y + 1][x]);
                     match character {
-                        (true, true)   => pixels = "█",
-                        (true, false)  => pixels = "▀",
-                        (false, true)  => pixels = "▄",
-                        (false, false) => pixels = " "
+                        (true, true) => pixels = '█',
+                        (true, false) => pixels = '▀',
+                        (false, true) => pixels = '▄',
+                        (false, false) => pixels = ' ',
                     }
                 } else {
                     match board[y][x] {
-                        true  => pixels = "▀",
-                        false => pixels = "",
+                        true => pixels = '▀',
+                        false => pixels = ' ',
                     }
                 }
-                buffer.push_str(pixels);
+                buffer.push(pixels);
             }
             buffer.push('\n');
         }
@@ -206,4 +207,12 @@ fn detect_loop(
     history
         .insert(board.iter().flatten().cloned().collect(), generation)
         .and_then(Some)
+}
+
+fn sleep_until(deadline: Instant) {
+    let now = Instant::now();
+
+    if let Some(delay) = deadline.checked_duration_since(now) {
+        thread::sleep(delay);
+    }
 }
