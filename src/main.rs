@@ -1,7 +1,7 @@
+use ahash::AHashMap;
 use crossterm::style::Print;
 use crossterm::terminal::{Clear, ClearType};
 use crossterm::{cursor, execute, queue, terminal};
-use std::collections::HashMap;
 use std::io::{Stdout, Write};
 use std::time::{Duration, Instant};
 use std::{io, thread};
@@ -31,7 +31,7 @@ fn main() {
     //initialize variables
     let mut board = random_board(width, height);
     let mut generation = 0usize;
-    let mut board_history = HashMap::new();
+    let mut board_history = AHashMap::new();
     let mut stdout = io::stdout();
 
     let frame_time = get_fps(20); //get fps
@@ -202,7 +202,7 @@ fn print_stats(board: &Vec<Vec<bool>>, generation: usize, stdout: &mut Stdout) {
 fn detect_loop(
     board: &Vec<Vec<bool>>,
     generation: usize,
-    history: &mut HashMap<Vec<bool>, usize>,
+    history: &mut AHashMap<Vec<bool>, usize>,
 ) -> Option<usize> {
     history
         .insert(board.iter().flatten().cloned().collect(), generation)
