@@ -1,8 +1,9 @@
 use crossterm::style::Print;
-use crossterm::terminal::{size, Clear, ClearType};
-use crossterm::{cursor, execute, queue};
+use crossterm::terminal::{Clear, ClearType};
+use crossterm::{cursor, execute, queue, terminal};
 use std::collections::HashMap;
-use std::io::{stdin, stdout, Stdout, Write};
+use std::io::{Stdout, Write};
+use std::{io, thread};
 use std::time::{Duration, Instant};
 
 ///Formats and prints each argument with a new line to a given writer
@@ -20,18 +21,24 @@ macro_rules! printnl {
 }
 
 fn main() {
-    let width = (size().unwrap().0 / 2) as usize;
-    let height = (size().unwrap().1 - 7) as usize;
+    //set board size according to terminal size with some extra space at the bottom
+    const BLANK_LINES: u16 = 7;
+    let width = terminal::size().unwrap().0 as usize;
+    let height = (
+        (terminal::size().unwrap().1 * 2) - (BLANK_LINES * 2)
+    ) as usize;
+    
+    //initialize variables
     let mut board = random_board(width, height);
     let mut generation = 0usize;
     let mut board_history = HashMap::new();
-    let mut stdout = stdout();
-    let frame_time = get_fps();
-
+    let mut stdout = io::stdout();
+    
+    let frame_time = get_fps(20); //get fps
     queue!(stdout, Clear(ClearType::All), cursor::Hide).unwrap(); //prep console
-
-    let start_time = Instant::now();
-
+    let start_time = Instant::now(); //start counting for average fps calculation
+    
+    //main loop
     loop {
         queue!(stdout, cursor::MoveTo(0, 0)).unwrap();
         print_board(&board, &mut stdout);
@@ -46,7 +53,7 @@ fn main() {
                 generation += 1;
             }
         }
-        std::thread::sleep(frame_time);
+        thread::sleep(frame_time);
     }
 
     //print average fps if unlimited
@@ -60,6 +67,7 @@ fn main() {
             Clear(ClearType::UntilNewLine),
         ).unwrap();
     }
+
     //cleanup
     execute!(
         stdout,
@@ -81,13 +89,13 @@ fn random_board(width: usize, height: usize) -> Vec<Vec<bool>> {
     board
 }
 
-fn get_fps() -> Duration {
-    const DEFAULT_FPS: u64 = 20;
-    print!("Input the desired FPS (0 for unlimited, default {DEFAULT_FPS}): ");
-    stdout().flush().unwrap();
+///Asks the user for their desired fps, uses default_fps if their input is invalid
+fn get_fps(default_fps: u64) -> Duration {
+    print!("Input the desired FPS (0 for unlimited, default {default_fps}): ");
+    io::stdout().flush().unwrap();
     let mut input_text = String::new();
-    stdin().read_line(&mut input_text).unwrap();
-    let target_fps = input_text.trim().parse::<u64>().unwrap_or(DEFAULT_FPS);
+    io::stdin().read_line(&mut input_text).unwrap();
+    let target_fps = input_text.trim().parse::<u64>().unwrap_or(default_fps);
     let frame_time: Duration;
     if target_fps > 0 {
         frame_time = Duration::from_millis(1000 / target_fps);
@@ -107,6 +115,8 @@ const NEIGHBOR_OFFSETS: [(isize, isize); 8] = [
 fn iterate_board(board: &mut Vec<Vec<bool>>) {
     let height = board.len();
     let width = board[0].len();
+
+    //create empty board to be populated with surviving cells
     let mut new_board = vec![vec![false; width]; height];
 
     for y in 0..height {
@@ -138,20 +148,41 @@ fn iterate_board(board: &mut Vec<Vec<bool>>) {
 
 ///Prints a board to stdout
 fn print_board(board: &Vec<Vec<bool>>, stdout: &mut Stdout) {
-    let mut buffer = String::with_capacity((board[0].len() * 2 + 1) * board[0].len());
+    let mut buffer = String::with_capacity(board.len() * (board[0].len()));
     for y in 0..board.len() {
-        for x in 0..board[0].len() {
-            let pixel = if board[y][x] { "██" } else { "  " };
-            buffer.push_str(pixel);
+        //only add to buffer every 2 rows
+        if y % 2 == 0 {
+            for x in 0..board[0].len() {
+                let pixels: &str;
+                //check if bottom pixel would be out of bounds
+                if y + 1 != board.len() {
+                    let character = (
+                        board[y][x],
+                        board[y + 1][x],
+                    );
+                    match character {
+                        (true, true)   => pixels = "█",
+                        (true, false)  => pixels = "▀",
+                        (false, true)  => pixels = "▄",
+                        (false, false) => pixels = " "
+                    }
+                } else {
+                    match board[y][x] {
+                        true  => pixels = "▀",
+                        false => pixels = "",
+                    }
+                }
+                buffer.push_str(pixels);
+            }
+            buffer.push('\n');
         }
-        buffer.push('\n');
     }
     execute!(stdout, Print(buffer)).unwrap();
 }
 
 ///Prints board statistics
 fn print_stats(board: &Vec<Vec<bool>>, generation: usize, stdout: &mut Stdout) {
-    let mut population = 0u128;
+    let mut population = 0u32;
     for y in 0..board.len() {
         for x in 0..board[0].len() {
             if board[y][x] {
