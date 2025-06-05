@@ -26,7 +26,7 @@ macro_rules! printnl {
 #[command(version)]
 struct Args {
     #[arg(short, long)]
-    fps: Option<u64>,
+    fps: Option<f64>,
     #[arg(short = 'x', long)]
     width: Option<usize>,
     #[arg(short = 'y', long)]
@@ -77,9 +77,9 @@ fn main() {
 
     let frame_time: Duration;
     match args.fps {
-        None => frame_time = get_fps(20),
-        Some(0) => frame_time = Duration::ZERO,
-        Some(fps) => frame_time = Duration::from_millis(1000 / fps)
+        None => frame_time = get_fps(20.0),
+        Some(0.0) => frame_time = Duration::ZERO,
+        Some(fps) => frame_time = Duration::from_secs(1).div_f64(fps)
     }
 
     //prep console
@@ -150,17 +150,17 @@ fn random_board(width: usize, height: usize) -> Vec<Vec<bool>> {
 }
 
 ///Asks the user for their desired FPS, uses default_fps if their input is invalid
-fn get_fps(default_fps: u64) -> Duration {
+fn get_fps(default_fps: f64) -> Duration {
     print!("Input the desired FPS (0 for unlimited, default {default_fps}): ");
     io::stdout().flush().unwrap();
     let mut input_text = String::new();
     io::stdin().read_line(&mut input_text).unwrap();
-    let target_fps = input_text.trim().parse::<u64>().unwrap_or(default_fps);
+    let target_fps = input_text.trim().parse::<f64>().unwrap_or(default_fps);
     let frame_time: Duration;
-    if target_fps > 0 {
-        frame_time = Duration::from_millis(1000 / target_fps);
+    if target_fps > 0.0 {
+        frame_time = Duration::from_secs(1).div_f64(target_fps);
     } else {
-        frame_time = Duration::from_millis(0);
+        frame_time = Duration::ZERO;
     }
     frame_time
 }
