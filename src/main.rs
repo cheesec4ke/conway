@@ -8,15 +8,15 @@ use std::str::FromStr;
 use std::time::{Duration, Instant};
 use std::{io, thread};
 
-///Formats and prints each argument with a new line to a given writer
+///Formats and prints each argument on a new line to a given writer
 macro_rules! printnl {
     ($writer:expr, $($text:expr),+ $(,)?) => {{
         $(
             execute!(
                 $writer,
+                cursor::MoveToNextLine(1),
                 Print(format!($text)),
-                Clear(ClearType::UntilNewLine),
-                cursor::MoveToNextLine(1)
+                Clear(ClearType::UntilNewLine)
             ).unwrap();
         )+
     }};
@@ -47,10 +47,19 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
+    let frame_time: Duration;
+    match args.fps {
+        None => frame_time = get_fps(20.0),
+        Some(0.0) => frame_time = Duration::ZERO,
+        Some(fps) => frame_time = Duration::from_secs(1).div_f64(fps)
+    }
+
     //set board size according to terminal size with some extra space at the bottom unless set otherwise
-    let mut blank_lines: u16 = 7;
+    let mut blank_lines: u16 = 6;
     if args.quiet {
         blank_lines = 3;
+    } else if frame_time.is_zero() {
+        blank_lines = 7;
     }
     let mut width = terminal::size().unwrap().0 as usize;
     if let Some(w) = args.width {
@@ -74,13 +83,6 @@ fn main() {
     let mut generation = 0usize;
     let mut board_history = AHashMap::new();
     let mut stdout = io::stdout();
-
-    let frame_time: Duration;
-    match args.fps {
-        None => frame_time = get_fps(20.0),
-        Some(0.0) => frame_time = Duration::ZERO,
-        Some(fps) => frame_time = Duration::from_secs(1).div_f64(fps)
-    }
 
     //prep console
     queue!(
@@ -119,21 +121,16 @@ fn main() {
 
     //print average fps if unlimited
     if frame_time.is_zero() && !args.quiet {
-        execute!(
-            stdout,
-            Print(format!(
-                "FPS: ~{:.2}",
-                generation as f64 / start_time.elapsed().as_secs_f64()
-            )),
-            Clear(ClearType::UntilNewLine),
-        ).unwrap();
+        let msg = format!("FPS: ~{:.2}", generation as f64 / start_time.elapsed().as_secs_f64());
+        printnl!(stdout, "{msg}");
     }
 
     //cleanup
-    if !args.quiet {
-        execute!(stdout, cursor::MoveToNextLine(1)).unwrap();
-    }
-    execute!(stdout, cursor::Show).unwrap();
+        execute!(
+            stdout,
+            cursor::MoveToNextLine(1),
+            cursor::Show
+        ).unwrap();
 }
 
 ///Generates a random board with a given width and height
@@ -212,6 +209,9 @@ fn print_board(board: &Vec<Vec<bool>>, stdout: &mut Stdout) {
     for y in 0..board.len() {
         //only add to buffer every 2 rows
         if y % 2 == 0 {
+            if y > 0 {
+                buffer.push('\n');
+            }
             for x in 0..board[0].len() {
                 let pixels: char;
                 //check if bottom pixel would be out of bounds
@@ -231,7 +231,6 @@ fn print_board(board: &Vec<Vec<bool>>, stdout: &mut Stdout) {
                 }
                 buffer.push(pixels);
             }
-            buffer.push('\n');
         }
     }
     execute!(stdout, Print(buffer)).unwrap();
