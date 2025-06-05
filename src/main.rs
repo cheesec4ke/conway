@@ -1,9 +1,10 @@
 use ahash::AHashMap;
 use clap::Parser;
-use crossterm::style::Print;
+use crossterm::style::{Color, Print, SetForegroundColor};
 use crossterm::terminal::{Clear, ClearType};
 use crossterm::{cursor, execute, queue, terminal};
 use std::io::{Stdout, Write};
+use std::str::FromStr;
 use std::time::{Duration, Instant};
 use std::{io, thread};
 
@@ -30,6 +31,8 @@ struct Args {
     width: Option<usize>,
     #[arg(short = 'y', long)]
     height: Option<usize>,
+    #[arg(short, long)]
+    color: Option<String>,
     #[arg(
         short,
         long,
@@ -60,6 +63,12 @@ fn main() {
         height = h;
     }
 
+    //set color if specified
+    let mut color = Color::Reset;
+    if let Some(c) = args.color {
+        color = Color::from_str(&c).unwrap();
+    }
+
     //initialize variables
     let mut board = random_board(width, height);
     let mut generation = 0usize;
@@ -73,7 +82,13 @@ fn main() {
         Some(fps) => frame_time = Duration::from_millis(1000 / fps)
     }
 
-    queue!(stdout, Clear(ClearType::All), cursor::Hide).unwrap(); //prep console
+    //prep console
+    queue!(
+        stdout, 
+        Clear(ClearType::All), 
+        cursor::Hide, 
+        SetForegroundColor(color)
+    ).unwrap();
 
     //main loop
     let start_time = Instant::now(); //start counting for average fps calculation
