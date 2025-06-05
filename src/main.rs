@@ -5,6 +5,8 @@ use crossterm::terminal::{Clear, ClearType};
 use crossterm::{cursor, execute, queue, terminal};
 use std::io::{Stdout, Write};
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{io, thread};
 
@@ -42,6 +44,15 @@ struct Args {
         num_args = 0..1,
     )]
     quiet: bool,
+    #[arg(
+        short,
+        long,
+        require_equals = true,
+        default_value = "false",
+        default_missing_value = "true",
+        num_args = 0..1,
+    )]
+    infinite: bool,
 }
 
 fn main() {
@@ -57,9 +68,14 @@ fn main() {
     //set board size according to terminal size with some extra space at the bottom unless set otherwise
     let mut blank_lines: u16 = 6;
     if args.quiet {
-        blank_lines = 3;
-    } else if frame_time.is_zero() {
-        blank_lines = 7;
+        blank_lines -= 3;
+    } else {
+        if args.infinite {
+            blank_lines -= 1;
+        }
+        if frame_time.is_zero() {
+            blank_lines += 1;
+        }
     }
     let mut width = terminal::size().unwrap().0 as usize;
     if let Some(w) = args.width {
@@ -92,21 +108,36 @@ fn main() {
         SetForegroundColor(color)
     ).unwrap();
 
+    //create an atomic bool to check if ctrl+c has been pressed
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        r.store(false, Ordering::SeqCst);
+    }).expect("Error setting Ctrl-C handler");
+    
     //main loop
+    let mut frames = 0;
     let start_time = Instant::now(); //start counting for average fps calculation
     let mut deadline = Instant::now() + frame_time; //set the fps limit
-    loop {
+    while running.load(Ordering::SeqCst) {
         queue!(stdout, cursor::MoveTo(0, 0)).unwrap();
         print_board(&board, &mut stdout);
+        frames += 1;
         if !args.quiet {
             print_stats(&board, generation, &mut stdout);
         }
         match detect_loop(&board, generation, &mut board_history) {
             Some(loop_start) => {
-                if !args.quiet {
-                    printnl!(stdout, "Game started looping from generation {loop_start}");
+                if args.infinite {
+                    board = random_board(width, height);
+                    generation = 0usize;
+                    board_history = AHashMap::new();
+                } else {
+                    if !args.quiet {
+                        printnl!(stdout, "Game started looping from generation {loop_start}");
+                    }
+                    break;
                 }
-                break;
             }
             None => {
                 iterate_board(&mut board);
@@ -121,7 +152,7 @@ fn main() {
 
     //print average fps if unlimited
     if frame_time.is_zero() && !args.quiet {
-        let msg = format!("FPS: ~{:.2}", generation as f64 / start_time.elapsed().as_secs_f64());
+        let msg = format!("FPS: ~{:.2}", frames as f64 / start_time.elapsed().as_secs_f64());
         printnl!(stdout, "{msg}");
     }
 
