@@ -15,7 +15,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/cache@v4
+    - uses: actions/checkout@v4
+    - name: Cache
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/bin/
@@ -24,7 +26,6 @@ jobs:
           ~/.cargo/git/db/
           target/
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-    - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose
     - name: Run tests
