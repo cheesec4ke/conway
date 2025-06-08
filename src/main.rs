@@ -10,11 +10,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{io, thread};
 
-///Formats and prints each argument on a new line to a given writer
-macro_rules! printnl {
+///Formats and queues each argument on a new line to a given writer
+macro_rules! queueln {
     ($writer:expr, $($text:expr),+ $(,)?) => {{
         $(
-            execute!(
+            queue!(
                 $writer,
                 cursor::MoveToNextLine(1),
                 Print(format!($text)),
@@ -114,7 +114,7 @@ fn main() {
     ctrlc::set_handler(move || {
         r.store(false, Ordering::SeqCst);
     }).expect("Error setting Ctrl-C handler");
-    
+
     //main loop
     let mut frames = 0;
     let start_time = Instant::now(); //start counting for average fps calculation
@@ -134,7 +134,7 @@ fn main() {
                     board_history = AHashMap::new();
                 } else {
                     if !args.quiet {
-                        printnl!(stdout, "Game started looping from generation {loop_start}");
+                        queueln!(stdout, "Game started looping from generation {loop_start}");
                     }
                     break;
                 }
@@ -153,15 +153,15 @@ fn main() {
     //print average fps if unlimited
     if frame_time.is_zero() && !args.quiet {
         let msg = format!("FPS: ~{:.2}", frames as f64 / start_time.elapsed().as_secs_f64());
-        printnl!(stdout, "{msg}");
+        queueln!(stdout, "{msg}");
     }
 
     //cleanup
-        execute!(
-            stdout,
-            cursor::MoveToNextLine(1),
-            cursor::Show
-        ).unwrap();
+    execute!(
+        stdout,
+        cursor::MoveToNextLine(1),
+        cursor::Show
+    ).unwrap();
 }
 
 ///Generates a random board with a given width and height
@@ -264,7 +264,7 @@ fn print_board(board: &Vec<Vec<bool>>, stdout: &mut Stdout) {
             }
         }
     }
-    execute!(stdout, Print(buffer)).unwrap();
+    queue!(stdout, Print(buffer)).unwrap();
 }
 
 ///Prints board statistics
@@ -277,7 +277,7 @@ fn print_stats(board: &Vec<Vec<bool>>, generation: usize, stdout: &mut Stdout) {
             }
         }
     }
-    printnl!(
+    queueln!(
         stdout,
         "Generation: {generation}",
         "Population: {population}"
