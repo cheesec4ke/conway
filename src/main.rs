@@ -53,6 +53,15 @@ struct Args {
         num_args = 0..1,
     )]
     infinite: bool,
+    #[arg(
+        short,
+        long,
+        require_equals = true,
+        default_value = "false",
+        default_missing_value = "true",
+        num_args = 0..1,
+    )]
+    noblank: bool,
 }
 
 fn main() {
@@ -65,18 +74,23 @@ fn main() {
         Some(fps) => frame_time = Duration::from_secs(1).div_f64(fps)
     }
 
-    //set board size according to terminal size with some extra space at the bottom unless set otherwise
-    let mut blank_lines: u16 = 6;
-    if args.quiet {
-        blank_lines -= 3;
-    } else {
-        if args.infinite {
+    //set blank space for extra output according to options
+    let mut blank_lines: u16 = 0;
+    if !args.quiet {
+        blank_lines += 6;
+        if args.infinite && !args.noblank {
             blank_lines -= 1;
         }
         if frame_time.is_zero() {
             blank_lines += 1;
         }
+    } else {
+        blank_lines += 3;
     }
+    if args.noblank {
+        blank_lines -= 3;
+    }
+    //set board size according to terminal size
     let mut width = terminal::size().unwrap().0 as usize;
     if let Some(w) = args.width {
         width = w;
